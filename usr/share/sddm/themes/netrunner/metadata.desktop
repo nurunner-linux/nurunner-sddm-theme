@@ -1,0 +1,20 @@
+[SddmGreeterTheme]
+Name=Netrunner
+Name[x-test]=xxNetrunnerxx
+
+Description=Netrunner Theme
+Description[x-test]=xxNetrunner Themexx
+
+Author=David Edmundson
+Copyright=(c) 2014, David Edmundson
+License=CC-BY-SA
+Type=sddm-theme
+Version=0.1
+Website=https://github.com/sddm/sddm
+Screenshot=netrunner.png
+MainScript=Main.qml
+ConfigFile=theme.conf
+TranslationsDirectory=translations
+Email=davidedmundson@kde.org
+Theme-Id=netrunner
+Theme-API=2.0
