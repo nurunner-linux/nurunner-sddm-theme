@@ -23,5 +23,6 @@ import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 
 PlasmaComponents.Label {
-    color: PlasmaCore.ColorScope.textColor
+    color: "#fdfdfd"
+    opacity: 0.6
 }
