@@ -37,25 +37,13 @@ ListView {
     delegate: UserDelegate {
         name: (model.realName === "") ? model.name : model.realName
         userName: model.name || ""
-        iconSource: {
-            if (model.icon) {
-                if (model.icon === "/usr/share/sddm/faces/default.face.icon") {
-                    iconSource = "artwork/default.face.icon"
-                } else if (model.icon === "/usr/share/sddm/faces/root.face.icon") {
-                    iconSource = "artwork/root.face.icon"
-                } else {
-                    iconSource = model.icon
-                }
-            } else {
-                iconSource = "user-identity"
-            }
-        }
-        width: view.userItemWidth
-        faceSize: view.userFaceSize
+        iconSource: model.icon ? model.icon : "user-identity"
+        width: ListView.view.userItemWidth
+        faceSize: ListView.view.userFaceSize
 
         onClicked: {
-            view.currentIndex = index;
-            view.userSelected();
+            ListView.view.currentIndex = index;
+            ListView.view.userSelected();
         }
     }
 

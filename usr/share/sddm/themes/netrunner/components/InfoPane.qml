@@ -35,6 +35,8 @@ ColumnLayout {
         font.weight: Font.DemiBold
         fontSizeMode: Text.HorizontalFit
         font.pointSize: 36
+        // NativeRendering is utterly broken at large font sizes, ripping apart letters and stuff
+        renderType: Text.QtRendering
     }
 
     BreezeLabel {
@@ -65,6 +67,8 @@ ColumnLayout {
                     return i18nd("plasma_lookandfeel_org.kde.lookandfeel","%1%. Charging", battery.percent)
                 case "FullyCharged":
                     return i18nd("plasma_lookandfeel_org.kde.lookandfeel","Fully charged")
+                case "NoCharge":
+                    return i18nd("plasma_lookandfeel_org.kde.lookandfeel","%1%. Plugged in, not charging", battery.percent)
                 default:
                     return i18nd("plasma_lookandfeel_org.kde.lookandfeel","%1% battery remaining", battery.percent)
                 }
