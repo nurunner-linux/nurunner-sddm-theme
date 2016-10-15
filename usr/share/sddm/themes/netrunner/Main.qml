@@ -1,5 +1,5 @@
 /*
- *   Copyright 2014 David Edmundson <davidedmundson@kde.org>
+ *   Copyright 2016 David Edmundson <davidedmundson@kde.org>
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Library General Public License as
@@ -18,244 +18,198 @@
  */
 
 import QtQuick 2.2
+
 import QtQuick.Layouts 1.1
-import QtQuick.Controls 1.1 as Controls
+import QtQuick.Controls 1.1
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
+import org.kde.plasma.extras 2.0 as PlasmaExtras
 
-import SddmComponents 2.0
+import "components"
 
-import "./components"
-
-Image {
+PlasmaCore.ColorScope {
     id: root
-    width: 1000
-    height: 1000
+    colorGroup: PlasmaCore.Theme.ComplementaryColorGroup
+
+    width: 1600
+    height: 900
+
+    property string notificationMessage
 
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
     LayoutMirroring.childrenInherit: true
 
     Repeater {
         model: screenModel
+
         Background {
             x: geometry.x; y: geometry.y; width: geometry.width; height:geometry.height
             source: config.background
             fillMode: Image.PreserveAspectCrop
-            onStatusChanged: {
-                if (status == Image.Error && source != config.defaultBackground) {
-                    source = config.defaultBackground
-                }
-            }
         }
     }
 
-    property bool debug: false
-
-    Rectangle {
-        id: debug3
-        color: "green"
-        visible: debug
-        width: 3
-        height: parent.height
-        anchors.horizontalCenter: root.horizontalCenter
+    Clock {
+        visible: y > 0
+        anchors.bottom: parent.verticalCenter
+        anchors.bottomMargin: units.gridUnit * 13
+        anchors.horizontalCenter: parent.horizontalCenter
     }
 
-    Controls.StackView {
-        id: stackView
 
-        //Display the loginpromt only in the primary screen
-        readonly property rect geometry: screenModel.geometry(screenModel.primary)
-        width: geometry.width
-        x: geometry.x
-        height: units.largeSpacing*14
-        //Display the BreezeBlock in the middle of each screen
-        y: geometry.y + (geometry.height / 2) - (height / 2)
+    StackView {
+        id: mainStack
+        anchors {
+            top: parent.top
+            bottom: footer.top
+            left: parent.left
+            right: parent.right
+            topMargin: footer.height // effectively centre align within the view
+        }
+        focus: true //StackView is an implicit focus scope, so we need to give this focus so the item inside will have it
 
-        initialItem: BreezeBlock {
-            id: loginPrompt
+        Timer {
+            //SDDM has a bug in 0.13 where even though we set the focus on the right item within the window, the window doesn't have focus
+            //it is fixed in 6d5b36b28907b16280ff78995fef764bb0c573db which will be 0.14
+            //we need to call "window->activate()" *After* it's been shown. We can't control that in QML so we use a shoddy timer
+            //it's been this way for all Plasma 5.x without a huge problem
+            running: true
+            repeat: false
+            interval: 200
+            onTriggered: mainStack.forceActiveFocus()
+        }
 
-            //Enable clipping whilst animating, otherwise the items would be shifted to other screens in multiscreen setups
-            //As there are only 2 items (loginPrompt and logoutScreenComponent), it's sufficient to do it only in this component
-            //Remember to enable clipping whilst animating when creating additional items for the StackView!
-            Controls.Stack.onStatusChanged: {
-                if(Controls.Stack.status === Controls.Stack.Activating || Controls.Stack.status === Controls.Stack.Deactivating){
-                    stackView.clip = true;
-                }else if(Controls.Stack.status === Controls.Stack.Active || Controls.Stack.status === Controls.Stack.Inactive){
-                    stackView.clip = false;
+        initialItem: Login {
+            id: userListComponent
+            userListModel: userModel
+            userListCurrentIndex: userModel.lastIndex >= 0 ? userModel.lastIndex : 0
+            showUserList: (userListModel.count && userListModel.disableAvatarsThreshold) ? userListModel.count <= userListModel.disableAvatarsThreshold : true
+
+            notificationMessage: root.notificationMessage
+
+            actionItems: [
+                ActionButton {
+                    iconSource: "system-suspend"
+                    text: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Suspend")
+                    onClicked: sddm.suspend()
+                    enabled: sddm.canSuspend
+                },
+                ActionButton {
+                    iconSource: "system-reboot"
+                    text: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Restart")
+                    onClicked: sddm.reboot()
+                    enabled: sddm.canReboot
+                },
+                ActionButton {
+                    iconSource: "system-shutdown"
+                    text: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Shutdown")
+                    onClicked: sddm.powerOff()
+                    enabled: sddm.canPowerOff
+                },
+                ActionButton {
+                    iconSource: "system-search"
+                    text: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Different User")
+                    onClicked: mainStack.push(userPromptComponent)
+                    enabled: true
+                    visible: !userListComponent.showUsernamePrompt
                 }
+            ]
+
+            onLoginRequest: {
+                root.notificationMessage = ""
+                sddm.login(username, password, sessionButton.currentIndex)
             }
+        }
 
-            main: UserSelect {
-                model: userModel
-                selectedIndex: userModel.lastIndex
-
-                //Resets the "Login Failed" notification after 3 seconds
-                Timer {
-                    id: notificationResetTimer
-                    interval: 3000
-                    onTriggered: notification = ""
-                }
-
-                Connections {
-                    target: sddm
-                    onLoginFailed: {
-                        notificationResetTimer.restart()
-                        notification = i18nd("plasma_lookandfeel_org.kde.lookandfeel", "Login Failed")
-                    }
-                }
-
-            }
-
-            controls: Item {
-                height: childrenRect.height
-
-                property alias password: passwordInput.text
-                property alias sessionIndex: sessionCombo.currentIndex
-                property alias buttonEnabled: loginButton.enabled
-                property alias pwFieldEnabled: passwordInput.enabled
-
-                ColumnLayout {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 0
-                    RowLayout {
-                        //NOTE password is deliberately the first child so it gets focus
-                        //be careful when re-ordering
-
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        PlasmaComponents.TextField {
-                            id: passwordInput
-                            placeholderText: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Password")
-                            echoMode: TextInput.Password
-                            onAccepted: loginPrompt.startLogin()
-                            focus: true
-
-                            //focus works in qmlscene
-                            //but this seems to be needed when loaded from SDDM
-                            //I don't understand why, but we have seen this before in the old lock screen
-                            Timer {
-                                interval: 200
-                                running: true
-                                onTriggered: passwordInput.forceActiveFocus()
-                            }
-                            //end hack
-
-                            Keys.onEscapePressed: {
-                                //nextItemInFocusChain(false) is previous Item
-                                nextItemInFocusChain(false).forceActiveFocus();
-                            }
-
-                            //if empty and left or right is pressed change selection in user switch
-                            //this cannot be in keys.onLeftPressed as then it doesn't reach the password box
-                            Keys.onPressed: {
-                                if (event.key == Qt.Key_Left && !text) {
-                                    loginPrompt.mainItem.decrementCurrentIndex();
-                                    event.accepted = true
-                                }
-                                if (event.key == Qt.Key_Right && !text) {
-                                    loginPrompt.mainItem.incrementCurrentIndex();
-                                    event.accepted = true
-                                }
-                            }
-
-                        }
-
-                        PlasmaComponents.Button {
-                            id: loginButton
-                            //this keeps the buttons the same width and thus line up evenly around the centre
-                            Layout.minimumWidth: passwordInput.width
-                            text: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Login")
-                            onClicked: loginPrompt.startLogin();
-                        }
-                    }
-
-                    BreezeLabel {
-                        id: capsLockWarning
-                        text: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Caps Lock is on")
-                        visible: keystateSource.data["Caps Lock"]["Locked"]
-
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        font.weight: Font.Bold
-
-                        PlasmaCore.DataSource {
-                            id: keystateSource
-                            engine: "keystate"
-                            connectedSources: "Caps Lock"
-                        }
-                    }
-                }
-
-                PlasmaComponents.ComboBox {
-                    id: sessionCombo
-                    model: sessionModel
-                    currentIndex: sessionModel.lastIndex
-
-                    width: 200
-                    textRole: "name"
-
-                    anchors.left: parent.left
-                }
-
-                LogoutOptions {
-                    mode: ""
-                    canShutdown: true
-                    canReboot: true
-                    canLogout: false
-                    exclusive: false
-
-                    anchors {
-                        right: parent.right
-                    }
-
-                    onModeChanged: {
-                        if (mode) {
-                            stackView.push(logoutScreenComponent, {"mode": mode})
-                        }
-                    }
-                    onVisibleChanged: if(visible) {
-                                          mode = ""
-                                      }
-                }
-
-                Connections {
-                    target: sddm
-                    onLoginFailed: {
-                        //Re-enable button and textfield
-                        passwordInput.enabled = true
-                        passwordInput.selectAll()
-                        passwordInput.forceActiveFocus()
-                        loginButton.enabled = true;
-                    }
-                }
-
-            }
-
-            function startLogin () {
-                //Disable button and textfield while password check is running
-                controlsItem.pwFieldEnabled = false;
-                controlsItem.buttonEnabled = false;
-                //Clear notification in case the notificationResetTimer hasn't expired yet
-                mainItem.notification = ""
-                sddm.login(mainItem.selectedUser, controlsItem.password, controlsItem.sessionIndex)
-            }
-
-            Component {
-                id: logoutScreenComponent
-                LogoutScreen {
-                    onCancel: {
-                        stackView.pop()
-                    }
-
-                    onShutdownRequested: {
-                        sddm.powerOff()
-                    }
-
-                    onRebootRequested: {
-                        sddm.reboot()
-                    }
-                }
+        Behavior on opacity {
+            OpacityAnimator {
+                duration: units.longDuration
             }
         }
 
     }
+
+    Component {
+        id: userPromptComponent
+        Login {
+            showUsernamePrompt: true
+            notificationMessage: root.notificationMessage
+
+            userListModel: QtObject {
+                property string name: i18nd("plasma_lookandfeel_org.kde.lookandfeel", "Login as different user")
+                property string iconSource: ""
+            }
+
+            onLoginRequest: {
+                root.notificationMessage = ""
+                sddm.login(username, password, sessionButton.currentIndex)
+            }
+
+            actionItems: [
+                ActionButton {
+                    iconSource: "go-previous"
+                    text: i18nd("plasma_lookandfeel_org.kde.lookandfeel","Back")
+                    onClicked: mainStack.pop()
+                }
+            ]
+        }
+    }
+
+    //Footer
+    RowLayout {
+        id: footer
+        anchors {
+            bottom: parent.bottom
+            left: parent.left
+            right: parent.right
+            margins: units.smallSpacing
+        }
+
+        Behavior on opacity {
+            OpacityAnimator {
+                duration: units.longDuration
+            }
+        }
+
+        KeyboardButton {
+        }
+
+        SessionButton {
+            id: sessionButton
+        }
+
+        Item {
+            Layout.fillWidth: true
+        }
+
+        Battery { }
+    }
+
+    Connections {
+        target: sddm
+        onLoginFailed: {
+            notificationMessage = i18nd("plasma_lookandfeel_org.kde.lookandfeel", "Login Failed")
+        }
+        onLoginSucceeded: {
+            //note SDDM will kill the greeter at some random point after this
+            //there is no certainty any transition will finish, it depends on the time it
+            //takes to complete the init
+            mainStack.opacity = 0
+            footer.opacity = 0
+        }
+    }
+
+    onNotificationMessageChanged: {
+        if (notificationMessage) {
+            notificationResetTimer.start();
+        }
+    }
+
+    Timer {
+        id: notificationResetTimer
+        interval: 3000
+        onTriggered: notificationMessage = ""
+    }
+
 }

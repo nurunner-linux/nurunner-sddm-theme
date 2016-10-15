@@ -1,6 +1,6 @@
-import QtQuick 2.0
+import QtQuick 2.2
 
-QtObject
+Item
 {
     signal loginFailed()
     signal loginSucceeded()
@@ -23,9 +23,23 @@ QtObject
 
 
     function login(user, password, sessionIndex) {
-        console.log("SDDM - logging in as ", user, password)
-        //pretend login failed
-        loginFailed()
+        console.log("SDDM - logging in as ", user, password, sessionIndex)
+
+        //modify as appropriate for testing
+        var success = false
+
+        if (success) {
+            loginSucceeded();
+        } else {
+            tryLogin.start();
+        }
+
+    }
+
+    Timer {
+        id: tryLogin
+        interval: 1000
+        onTriggered: loginFailed();
     }
 
     property bool canPowerOff: true
